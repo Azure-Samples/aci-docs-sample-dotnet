@@ -187,7 +187,8 @@
         /// </summary>
         private static void DeleteContainerGroup(string containerGroupName)
         {
-            Console.WriteLine($"\nDeleting container group '{containerGroupName}'...");
+            Console.WriteLine($"\nPress ENTER to delete container group '{containerGroupName}':");
+            Console.ReadLine();
 
             IContainerGroup containerGroup = null;
 
@@ -198,6 +199,8 @@
                 SdkContext.DelayProvider.Delay(1000);
             }
 
+            Console.WriteLine($"Deleting container group '{containerGroupName}'...");
+            
             MyAzure.ContainerGroups.DeleteById(containerGroup.Id);
         }
 
