@@ -1,57 +1,38 @@
-# Project Name
+# Azure Container Instances code samples for documentation - .NET
 
-(short, 1-3 sentenced, description of the project)
+This .NET Core 2.0 console application demonstrates several common [Azure Container Instances (ACI)](https://docs.microsoft.com/azure/container-instances/) operations in C# using the fluent APIs in the [Azure management libraries for .NET](https://docs.microsoft.com/dotnet/azure/dotnet-sdk-azure-concepts).
+
+The code in this project is ingested into one or more articles on https://docs.microsoft.com.
 
 ## Features
 
-This project framework provides the following features:
+The code in this sample project demontrates the following operations:
 
-* Feature 1
-* Feature 2
-* ...
+* Authenticate with Azure
+* Create and delete resource group
+* Create and delete single- and multi-container container groups
+  * Exposes application container to internet with public DNS name
+  * Multi-container group include both application and sidecar containers
+* Get and print container group details
+* Get and print container logs
 
 ## Getting Started
 
 ### Prerequisites
 
-(ideally very short, if any)
+* [Microsoft .NET Core SDK](https://docs.microsoft.com/dotnet/core) version 2.1.2+
 
-- OS
-- Library version
-- ...
+### Run the sample
 
-### Installation
+1. Use the Azure CLI (or Cloud Shell) to generate an Azure credentials file:
 
-(ideally very short)
+   `az ad sp create-for-rbac --sdk-auth > my.azureauth`
 
-- npm install [package name]
-- mvn install
-- ...
-
-### Quickstart
-(Add steps to get up and running quickly)
-
-1. git clone [repository clone url]
-2. cd [respository name]
-3. ...
-
-
-## Demo
-
-A demo app is included to show how to use the project.
-
-To run the demo, follow these steps:
-
-(Add steps to start up the demo)
-
-1.
-2.
-3.
+1. Set environment variable `AZURE_AUTH_LOCATION` to the full path to the credentials file
+1. `git clone https://github.com/Azure-Samples/aci-docs-sample-dotnet`
+1. `cd aci-docs-sample-dotnet`
+1. `dotnet run`
 
 ## Resources
 
-(Any additional resources or related projects)
-
-- Link to supporting information
-- Link to similar sample
-- ...
+* [Azure Management Libraries for .NET](https://github.com/Azure/azure-libraries-for-net) (GitHub)
