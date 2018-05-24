@@ -11,10 +11,12 @@ The code in this sample project demontrates the following operations:
 * Authenticate with Azure
 * Create and delete resource group
 * Create and delete single- and multi-container container groups
-  * Exposes application container to internet with public DNS name
+  * Expose application container to internet with public DNS name
   * Multi-container group includes both application and sidecar containers
+  * Demonstrate async container group create
 * Get and print container group details
-* Get and print container logs
+* Delete container groups
+* Delete resource group
 
 ## Getting Started
 
