@@ -10,19 +10,21 @@
     {
         static void Main(string[] args)
         {
-            // Set the AZURE_AUTH_LOCATION environment variable with the full
-            // path to an auth file. Create an auth file with the Azure CLI:
-            // az ad sp create-for-rbac --sdk-auth > my.azureauth
-            string authFilePath = Environment.GetEnvironmentVariable("AZURE_AUTH_LOCATION");
-
+            #region local_config
             string resourceGroupName  = SdkContext.RandomResourceName("rg-aci-", 6);
             string containerGroupName = SdkContext.RandomResourceName("aci-", 6);
             string multiContainerGroupName = containerGroupName + "-multi";
             string containerImage1 = "microsoft/aci-helloworld";
             string containerImage2 = "microsoft/aci-tutorial-sidecar";
+            
+            // Set the AZURE_AUTH_LOCATION environment variable with the full
+            // path to an auth file. Create an auth file with the Azure CLI:
+            // az ad sp create-for-rbac --sdk-auth > my.azureauth
+            string authFilePath = Environment.GetEnvironmentVariable("AZURE_AUTH_LOCATION");
 
             // Authenticate with Azure
             IAzure azure = GetAzureContext(authFilePath);
+            #endregion
 
             // Create a resource group in which the container groups are to be
             // created.
@@ -52,10 +54,13 @@
             Console.ReadLine();
         }
 
+        #region azure_auth
         /// <summary>
         /// Returns an authenticated Azure context using the credentials in the
         /// specified auth file.
         /// </summary>
+        /// <param name="authFilePath">The full path to a credentials file on the local filesystem.</param>
+        /// <returns>Authenticated IAzure context.</returns>
         private static IAzure GetAzureContext(string authFilePath)
         {            
             IAzure azure;
@@ -84,10 +89,15 @@
 
             return azure;
         }
+        #endregion
 
+        #region create_resource_group
         /// <summary>
         /// Creates a resource group of the specified name.
         /// </summary>
+        /// <param name="azure">An authenticated IAzure object.</param>
+        /// <param name="resourceGroupName">The name of the resource group to be created.</param>
+        /// <param name="azureRegion">The Region in which to create the resource group.</param>
         private static void CreateResourceGroup(IAzure azure, string resourceGroupName, Region azureRegion)
         {
             Console.WriteLine($"\nCreating resource group '{resourceGroupName}'...");
@@ -96,10 +106,16 @@
                 .WithRegion(azureRegion)
                 .Create();
         }
+        #endregion
 
+        #region create_container_group
         /// <summary>
         /// Creates a container group with a single container in the specified resource group.
         /// </summary>
+        /// <param name="azure">An authenticated IAzure object.</param>
+        /// <param name="resourceGroupName">The name of the resource group in which to create the container group.</param>
+        /// <param name="containerGroupName">The name of the container group to create.</param>
+        /// <param name="containerImage">The container image name and tag, for example 'microsoft\aci-helloworld:latest'.</param>
         private static void CreateContainerGroup(IAzure azure,
                                                  string resourceGroupName, 
                                                  string containerGroupName, 
@@ -129,10 +145,17 @@
 
             Console.WriteLine($"Container group '{containerGroup.Name}' will be reachable at http://{containerGroup.Fqdn}");
         }
+        #endregion
 
+        #region create_container_group_multi
         /// <summary>
         /// Creates a container group with two containers in the specified resource group.
         /// </summary>
+        /// <param name="azure">An authenticated IAzure object.</param>
+        /// <param name="resourceGroupName">The name of the resource group in which to create the container group.</param>
+        /// <param name="containerGroupName">The name of the container group to create.</param>
+        /// <param name="containerImage1">The first container image name and tag, for example 'microsoft\aci-helloworld:latest'.</param>
+        /// <param name="containerImage2">The second container image name and tag, for example 'microsoft\aci-tutorial-sidecar:latest'.</param>
         private static void CreateContainerGroupMulti(IAzure azure,
                                                       string resourceGroupName,
                                                       string containerGroupName, 
@@ -169,10 +192,14 @@
 
             Console.WriteLine($"Container group '{containerGroup.Name}' will be reachable at http://{containerGroup.Fqdn}");
         }
+        #endregion
 
+        #region list_container_groups
         /// <summary>
         /// Prints the container groups in the specified resource group.
         /// </summary>
+        /// <param name="azure">An authenticated IAzure object.</param>
+        /// <param name="resourceGroupName">The name of the resource group containing the container group(s).</param>
         private static void ListContainerGroups(IAzure azure, string resourceGroupName)
         {
             Console.WriteLine($"\nListing container groups in resource group '{resourceGroupName}'...");
@@ -182,11 +209,15 @@
                 Console.WriteLine($"{containerGroup.Name}");
             }
         }
+        #endregion
 
+        #region get_container_group
         /// <summary>
-        /// Gets the specified container group and then prints a few of its
-        /// properties and their values.
+        /// Gets the specified container group and then prints a few of its properties and their values.
         /// </summary>
+        /// <param name="azure">An authenticated IAzure object.</param>
+        /// <param name="resourceGroupName">The name of the resource group containing the container group.</param>
+        /// <param name="containerGroupName">The name of the container group whose details should be printed.</param>
         private static void PrintContainerGroupDetails(IAzure azure, string resourceGroupName, string containerGroupName)
         {
             Console.Write($"\nGetting container group details for container group '{containerGroupName}'...");
@@ -209,10 +240,15 @@
             Console.WriteLine($"IP:     {containerGroup.IPAddress}");
             Console.WriteLine($"Region: {containerGroup.RegionName}");
         }
+        #endregion
 
+        #region delete_container_group
         /// <summary>
         /// Deletes the specified container group.
         /// </summary>
+        /// <param name="azure">An authenticated IAzure object.</param>
+        /// <param name="resourceGroupName">The name of the resource group containing the container group.</param>
+        /// <param name="containerGroupName">The name of the container group to delete.</param>
         private static void DeleteContainerGroup(IAzure azure, string resourceGroupName, string containerGroupName)
         {
             Console.WriteLine($"\nPress ENTER to delete container group '{containerGroupName}':");
@@ -231,15 +267,20 @@
 
             azure.ContainerGroups.DeleteById(containerGroup.Id);
         }
-
+        #endregion
+        
+        #region delete_resource_group
         /// <summary>
         /// Deletes the specified resource group.
         /// </summary>
+        /// <param name="azure">An authenticated IAzure object.</param>
+        /// <param name="resourceGroupName">The name of the resource group to delete.</param>
         private static void DeleteResourceGroup(IAzure azure, string resourceGroupName)
         {
             Console.WriteLine($"\nDeleting resource group '{resourceGroupName}'...");
 
             azure.ResourceGroups.DeleteByName(resourceGroupName);
         }
+        #endregion
     }
 }
