@@ -27,10 +27,10 @@ The code in this sample project demontrates the following operations:
 
 ### Run the sample
 
-1. Use the Azure CLI (or Cloud Shell) to generate an Azure credentials file:
+1. Use the Azure CLI (or Cloud Shell) to generate an Azure credentials file ([more info](https://github.com/Azure/azure-libraries-for-net/blob/master/AUTH.md))
 
    `az ad sp create-for-rbac --sdk-auth > my.azureauth`
-
+   
 1. Set environment variable `AZURE_AUTH_LOCATION` to the full path of the credentials file
 1. `git clone https://github.com/Azure-Samples/aci-docs-sample-dotnet`
 1. `cd aci-docs-sample-dotnet`
