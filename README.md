@@ -9,8 +9,8 @@ The code in this project is ingested into one or more articles on [docs.microsof
 The code in this sample project demontrates the following operations:
 
 * Authenticate with Azure
-* Create and delete resource group
-* Create and delete single- and multi-container container groups
+* Create resource group
+* Create single- and multi-container container groups
   * Expose application container to internet with public DNS name
   * Multi-container group includes both application and sidecar containers
   * Demonstrate async container group create
