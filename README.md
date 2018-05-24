@@ -1,6 +1,6 @@
 # Azure Container Instances .NET code samples for documentation
 
-This .NET Core 2.0 console application demonstrates several common [Azure Container Instances (ACI)](https://docs.microsoft.com/azure/container-instances/) operations in C# using the fluent APIs in the [Azure management libraries for .NET](https://docs.microsoft.com/dotnet/azure/dotnet-sdk-azure-concepts).
+This .NET Core 2.0 console application demonstrates several common [Azure Container Instances (ACI)](https://docs.microsoft.com/azure/container-instances/) operations in C# using the fluent APIs in the [Azure Management Libraries for .NET](https://docs.microsoft.com/dotnet/azure/dotnet-sdk-azure-concepts).
 
 The code in this project is ingested into one or more articles on [docs.microsoft.com](https://docs.microsoft.com). Modifying the existing `#region` tags in the sample source may impact the rendering of code snippets on [docs.microsoft.com](https://docs.microsoft.com), and is discouraged.
 
