@@ -1,6 +1,8 @@
 ﻿namespace aci_doc_sample_dotnet
 {
     using System;
+    using System.Threading;
+    using System.Threading.Tasks;
     using Microsoft.Azure.Management.Fluent;
     using Microsoft.Azure.Management.ResourceManager.Fluent;
     using Microsoft.Azure.Management.ResourceManager.Fluent.Core;
@@ -8,44 +10,50 @@
 
     class Program
     {
-        // Set the AZURE_AUTH_LOCATION environment variable with the full path
-        // to an auth file. You can create an auth file with the Azure CLI:
-        // az ad sp create-for-rbac --sdk-auth > my.azureauth
-        private static string AuthFilePath = Environment.GetEnvironmentVariable("AZURE_AUTH_LOCATION");
-
-        private static string ResourceGroupName  = SdkContext.RandomResourceName("rg-aci-", 6);
-        private static string ContainerGroupName = SdkContext.RandomResourceName("aci-", 6);
-        private static string MultiContainerGroupName = ContainerGroupName + "-multi";
-        private static string ContainerImage1 = "microsoft/aci-helloworld";
-        private static string ContainerImage2 = "microsoft/aci-tutorial-sidecar";
-
-        private static IAzure MyAzure;
-        private static readonly Region AzureRegion = Region.USEast;
-
         static void Main(string[] args)
         {
-            // Authenticate with Azure and create a resource group
-            Authenticate(AuthFilePath);
-            CreateResourceGroup(ResourceGroupName);
+            #region local_config
+            string resourceGroupName  = SdkContext.RandomResourceName("rg-aci-", 6);
+            string containerGroupName = SdkContext.RandomResourceName("aci-", 6);
+            string multiContainerGroupName = containerGroupName + "-multi";
+            string asyncContainerGroupName = containerGroupName + "-async";
+            string containerImage1 = "microsoft/aci-helloworld";
+            string containerImage2 = "microsoft/aci-tutorial-sidecar";
+            
+            // Set the AZURE_AUTH_LOCATION environment variable with the full
+            // path to an auth file. Create an auth file with the Azure CLI:
+            // az ad sp create-for-rbac --sdk-auth > my.azureauth
+            string authFilePath = Environment.GetEnvironmentVariable("AZURE_AUTH_LOCATION");
+
+            // Authenticate with Azure
+            IAzure azure = GetAzureContext(authFilePath);
+            #endregion
+
+            // Create a resource group in which the container groups are to be
+            // created.
+            CreateResourceGroup(azure, resourceGroupName, Region.USEast);
 
             // Demonstrate various container group operations
-            CreateContainerGroup(ContainerGroupName, ContainerImage1);
-            CreateContainerGroupMulti(MultiContainerGroupName, ContainerImage1, ContainerImage2);
-            ListContainerGroups(ResourceGroupName);
-            PrintContainerGroupDetails(ContainerGroupName);
-            PrintContainerLogs(ContainerGroupName);
+            CreateContainerGroup(azure, resourceGroupName, containerGroupName, containerImage1);
+            CreateContainerGroupMulti(azure, resourceGroupName, multiContainerGroupName, containerImage1, containerImage2);
+            CreateContainerGroupWithPolling(azure, resourceGroupName, asyncContainerGroupName, containerImage1);
+            ListContainerGroups(azure, resourceGroupName);
+            PrintContainerGroupDetails(azure, resourceGroupName, containerGroupName);
 
             // Clean up container groups
-            DeleteContainerGroup(ContainerGroupName);
-            DeleteContainerGroup(MultiContainerGroupName);
+            Console.WriteLine($"\nPress ENTER to delete all container groups...");
+            Console.ReadLine();
+            DeleteContainerGroup(azure, resourceGroupName, containerGroupName);
+            DeleteContainerGroup(azure, resourceGroupName, multiContainerGroupName);
+            DeleteContainerGroup(azure, resourceGroupName, asyncContainerGroupName);
 
             // Remove resource group (if the user so chooses)
             Console.WriteLine();
-            Console.Write($"Delete resource group '{ResourceGroupName}'? [yes] no: ");
+            Console.Write($"Delete resource group '{resourceGroupName}'? [yes] no: ");
             string response = Console.ReadLine().Trim().ToLower();
             if (response != "n" && response != "no")
             {
-                DeleteResourceGroup(ResourceGroupName);
+                DeleteResourceGroup(azure, resourceGroupName);
             }
 
             Console.WriteLine();
@@ -53,16 +61,24 @@
             Console.ReadLine();
         }
 
-        private static void Authenticate(string authFilePath)
+        #region azure_auth
+        /// <summary>
+        /// Returns an authenticated Azure context using the credentials in the
+        /// specified auth file.
+        /// </summary>
+        /// <param name="authFilePath">The full path to a credentials file on the local filesystem.</param>
+        /// <returns>Authenticated IAzure context.</returns>
+        private static IAzure GetAzureContext(string authFilePath)
         {            
+            IAzure azure;
             ISubscription sub;
 
             try
             {
                 Console.WriteLine($"Authenticating with Azure using credentials in file at {authFilePath}");
 
-                MyAzure = Azure.Authenticate(authFilePath).WithDefaultSubscription();
-                sub = MyAzure.GetCurrentSubscription();
+                azure = Azure.Authenticate(authFilePath).WithDefaultSubscription();
+                sub = azure.GetCurrentSubscription();
 
                 Console.WriteLine($"Authenticated with subscription '{sub.DisplayName}' (ID: {sub.SubscriptionId})");
             }
@@ -77,29 +93,56 @@
 
                 throw;
             }
-        }
 
-        private static void CreateResourceGroup(string resourceGroupName)
+            return azure;
+        }
+        #endregion
+
+        #region create_resource_group
+        /// <summary>
+        /// Creates a resource group of the specified name.
+        /// </summary>
+        /// <param name="azure">An authenticated IAzure object.</param>
+        /// <param name="resourceGroupName">The name of the resource group to be created.</param>
+        /// <param name="azureRegion">The Region in which to create the resource group.</param>
+        private static void CreateResourceGroup(IAzure azure, string resourceGroupName, Region azureRegion)
         {
             Console.WriteLine($"\nCreating resource group '{resourceGroupName}'...");
 
-            MyAzure.ResourceGroups.Define(resourceGroupName)
-                .WithRegion(AzureRegion)
+            azure.ResourceGroups.Define(resourceGroupName)
+                .WithRegion(azureRegion)
                 .Create();
         }
+        #endregion
 
-        private static void CreateContainerGroup(string containerGroupName, string containerImageName)
+        #region create_container_group
+        /// <summary>
+        /// Creates a container group with a single container.
+        /// </summary>
+        /// <param name="azure">An authenticated IAzure object.</param>
+        /// <param name="resourceGroupName">The name of the resource group in which to create the container group.</param>
+        /// <param name="containerGroupName">The name of the container group to create.</param>
+        /// <param name="containerImage">The container image name and tag, for example 'microsoft\aci-helloworld:latest'.</param>
+        private static void CreateContainerGroup(IAzure azure,
+                                                 string resourceGroupName, 
+                                                 string containerGroupName, 
+                                                 string containerImage)
         {
             Console.WriteLine($"\nCreating container group '{containerGroupName}'...");
 
-            var containerGroup = MyAzure.ContainerGroups.Define(containerGroupName)
-                .WithRegion(AzureRegion)
-                .WithExistingResourceGroup(ResourceGroupName)
+            // Get the resource group's region
+            IResourceGroup resGroup = azure.ResourceGroups.GetByName(resourceGroupName);
+            Region azureRegion = resGroup.Region;
+
+            // Create the container group
+            var containerGroup = azure.ContainerGroups.Define(containerGroupName)
+                .WithRegion(azureRegion)
+                .WithExistingResourceGroup(resourceGroupName)
                 .WithLinux()
                 .WithPublicImageRegistryOnly()
                 .WithoutVolume()
                 .DefineContainerInstance(containerGroupName + "-1")
-                    .WithImage(ContainerImage1)
+                    .WithImage(containerImage)
                     .WithExternalTcpPort(80)
                     .WithCpuCoreCount(1.0)
                     .WithMemorySizeInGB(1)
@@ -107,27 +150,46 @@
                 .WithDnsPrefix(containerGroupName)
                 .Create();
 
-            Console.WriteLine($"Container group '{containerGroup.Name}' will be reachable at http://{containerGroup.Fqdn}");
+            Console.WriteLine($"Once DNS has propagated, container group '{containerGroup.Name}' will be reachable at http://{containerGroup.Fqdn}");
         }
+        #endregion
 
-        private static void CreateContainerGroupMulti(string containerGroupName, string containerImageName1, string containerImageName2)
+        #region create_container_group_multi
+        /// <summary>
+        /// Creates a container group with two containers in the specified resource group.
+        /// </summary>
+        /// <param name="azure">An authenticated IAzure object.</param>
+        /// <param name="resourceGroupName">The name of the resource group in which to create the container group.</param>
+        /// <param name="containerGroupName">The name of the container group to create.</param>
+        /// <param name="containerImage1">The first container image name and tag, for example 'microsoft\aci-helloworld:latest'.</param>
+        /// <param name="containerImage2">The second container image name and tag, for example 'microsoft\aci-tutorial-sidecar:latest'.</param>
+        private static void CreateContainerGroupMulti(IAzure azure,
+                                                      string resourceGroupName,
+                                                      string containerGroupName, 
+                                                      string containerImage1, 
+                                                      string containerImage2)
         {
             Console.WriteLine($"\nCreating multi-container container group '{containerGroupName}'...");
 
-            var containerGroup = MyAzure.ContainerGroups.Define(containerGroupName)
-                .WithRegion(AzureRegion)
-                .WithExistingResourceGroup(ResourceGroupName)
+            // Get the resource group's region
+            IResourceGroup resGroup = azure.ResourceGroups.GetByName(resourceGroupName);
+            Region azureRegion = resGroup.Region;
+
+            // Create the container group
+            var containerGroup = azure.ContainerGroups.Define(containerGroupName)
+                .WithRegion(azureRegion)
+                .WithExistingResourceGroup(resourceGroupName)
                 .WithLinux()
                 .WithPublicImageRegistryOnly()
                 .WithoutVolume()
                 .DefineContainerInstance(containerGroupName + "-1")
-                    .WithImage(ContainerImage1)
+                    .WithImage(containerImage1)
                     .WithExternalTcpPort(80)
                     .WithCpuCoreCount(0.5)
                     .WithMemorySizeInGB(1)
                     .Attach()
                 .DefineContainerInstance(containerGroupName + "-2")
-                    .WithImage(ContainerImage2)
+                    .WithImage(containerImage2)
                     .WithoutPorts()
                     .WithCpuCoreCount(0.5)
                     .WithMemorySizeInGB(1)
@@ -135,23 +197,99 @@
                 .WithDnsPrefix(containerGroupName)
                 .Create();
 
-            Console.WriteLine($"Container group '{containerGroup.Name}' will be reachable at http://{containerGroup.Fqdn}");
+            Console.WriteLine($"Once DNS has propagated, container group '{containerGroup.Name}' will be reachable at http://{containerGroup.Fqdn}");
         }
+        #endregion
 
-        private static void ListContainerGroups(string resourceGroupName)
+        #region create_container_group_polling
+        /// <summary>
+        /// Creates a container group with a single container asynchronously, and
+        /// polls its status until its state is 'Running'.
+        /// </summary>
+        /// <param name="azure">An authenticated IAzure object.</param>
+        /// <param name="resourceGroupName">The name of the resource group in which to create the container group.</param>
+        /// <param name="containerGroupName">The name of the container group to create.</param>
+        /// <param name="containerImage">The container image name and tag, for example 'microsoft\aci-helloworld:latest'.</param>
+        private static void CreateContainerGroupWithPolling(IAzure azure,
+                                                 string resourceGroupName, 
+                                                 string containerGroupName, 
+                                                 string containerImage)
+        {
+            Console.WriteLine($"\nCreating container group '{containerGroupName}'...");
+
+            // Get the resource group's region
+            IResourceGroup resGroup = azure.ResourceGroups.GetByName(resourceGroupName);
+            Region azureRegion = resGroup.Region;
+
+            // Create the container group using a fire-and-forget task
+            Task.Run(() =>
+
+                azure.ContainerGroups.Define(containerGroupName)
+                    .WithRegion(azureRegion)
+                    .WithExistingResourceGroup(resourceGroupName)
+                    .WithLinux()
+                    .WithPublicImageRegistryOnly()
+                    .WithoutVolume()
+                    .DefineContainerInstance(containerGroupName + "-1")
+                        .WithImage(containerImage)
+                        .WithExternalTcpPort(80)
+                        .WithCpuCoreCount(1.0)
+                        .WithMemorySizeInGB(1)
+                        .Attach()
+                    .WithDnsPrefix(containerGroupName)
+                    .CreateAsync()
+            );
+
+            // Poll for the container group
+            IContainerGroup containerGroup = null;
+            while(containerGroup == null)
+            {
+                containerGroup = azure.ContainerGroups.GetByResourceGroup(resourceGroupName, containerGroupName);
+
+                Console.Write(".");
+
+                Thread.Sleep(1000);
+            }
+
+            Console.WriteLine();
+
+            // Poll until the container group is running
+            while(containerGroup.State != "Running")
+            {
+                Console.WriteLine($"Container group state: {containerGroup.Refresh().State}");
+                
+                Thread.Sleep(1000);
+            }
+
+            Console.WriteLine($"\nOnce DNS has propagated, container group '{containerGroup.Name}' will be reachable at http://{containerGroup.Fqdn}");
+        }
+        #endregion
+
+        #region list_container_groups
+        /// <summary>
+        /// Prints the container groups in the specified resource group.
+        /// </summary>
+        /// <param name="azure">An authenticated IAzure object.</param>
+        /// <param name="resourceGroupName">The name of the resource group containing the container group(s).</param>
+        private static void ListContainerGroups(IAzure azure, string resourceGroupName)
         {
             Console.WriteLine($"\nListing container groups in resource group '{resourceGroupName}'...");
 
-            foreach (var containerGroup in MyAzure.ContainerGroups.ListByResourceGroup(resourceGroupName))
+            foreach (var containerGroup in azure.ContainerGroups.ListByResourceGroup(resourceGroupName))
             {
                 Console.WriteLine($"{containerGroup.Name}");
             }
         }
+        #endregion
 
+        #region get_container_group
         /// <summary>
-        /// Gets and then prints several properties and their values for the specified container group.
+        /// Gets the specified container group and then prints a few of its properties and their values.
         /// </summary>
-        private static void PrintContainerGroupDetails(string containerGroupName)
+        /// <param name="azure">An authenticated IAzure object.</param>
+        /// <param name="resourceGroupName">The name of the resource group containing the container group.</param>
+        /// <param name="containerGroupName">The name of the container group whose details should be printed.</param>
+        private static void PrintContainerGroupDetails(IAzure azure, string resourceGroupName, string containerGroupName)
         {
             Console.Write($"\nGetting container group details for container group '{containerGroupName}'...");
 
@@ -160,7 +298,7 @@
             {
                 Console.Write(".");
 
-                containerGroup = MyAzure.ContainerGroups.GetByResourceGroup(ResourceGroupName, containerGroupName);
+                containerGroup = azure.ContainerGroups.GetByResourceGroup(resourceGroupName, containerGroupName);
 
                 SdkContext.DelayProvider.Delay(1000);
             }
@@ -173,45 +311,44 @@
             Console.WriteLine($"IP:     {containerGroup.IPAddress}");
             Console.WriteLine($"Region: {containerGroup.RegionName}");
         }
+        #endregion
 
-        /// <summary>
-        /// Prints the logs of the first container found in the specified container group.
-        /// </summary>
-        private static void PrintContainerLogs(string containerGroupName)
-        {
-            
-        }
-
+        #region delete_container_group
         /// <summary>
         /// Deletes the specified container group.
         /// </summary>
-        private static void DeleteContainerGroup(string containerGroupName)
+        /// <param name="azure">An authenticated IAzure object.</param>
+        /// <param name="resourceGroupName">The name of the resource group containing the container group.</param>
+        /// <param name="containerGroupName">The name of the container group to delete.</param>
+        private static void DeleteContainerGroup(IAzure azure, string resourceGroupName, string containerGroupName)
         {
-            Console.WriteLine($"\nPress ENTER to delete container group '{containerGroupName}':");
-            Console.ReadLine();
-
             IContainerGroup containerGroup = null;
 
             while (containerGroup == null)
             {
-                containerGroup = MyAzure.ContainerGroups.GetByResourceGroup(ResourceGroupName, containerGroupName);
+                containerGroup = azure.ContainerGroups.GetByResourceGroup(resourceGroupName, containerGroupName);
 
                 SdkContext.DelayProvider.Delay(1000);
             }
 
             Console.WriteLine($"Deleting container group '{containerGroupName}'...");
-            
-            MyAzure.ContainerGroups.DeleteById(containerGroup.Id);
-        }
 
+            azure.ContainerGroups.DeleteById(containerGroup.Id);
+        }
+        #endregion
+        
+        #region delete_resource_group
         /// <summary>
         /// Deletes the specified resource group.
         /// </summary>
-        private static void DeleteResourceGroup(string resourceGroupName)
+        /// <param name="azure">An authenticated IAzure object.</param>
+        /// <param name="resourceGroupName">The name of the resource group to delete.</param>
+        private static void DeleteResourceGroup(IAzure azure, string resourceGroupName)
         {
             Console.WriteLine($"\nDeleting resource group '{resourceGroupName}'...");
 
-            MyAzure.ResourceGroups.DeleteByName(resourceGroupName);
+            azure.ResourceGroups.DeleteByName(resourceGroupName);
         }
+        #endregion
     }
 }
