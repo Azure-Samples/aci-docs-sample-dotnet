@@ -1,6 +1,8 @@
 ﻿namespace aci_doc_sample_dotnet
 {
     using System;
+    using System.Threading;
+    using System.Threading.Tasks;
     using Microsoft.Azure.Management.Fluent;
     using Microsoft.Azure.Management.ResourceManager.Fluent;
     using Microsoft.Azure.Management.ResourceManager.Fluent.Core;
@@ -14,6 +16,7 @@
             string resourceGroupName  = SdkContext.RandomResourceName("rg-aci-", 6);
             string containerGroupName = SdkContext.RandomResourceName("aci-", 6);
             string multiContainerGroupName = containerGroupName + "-multi";
+            string asyncContainerGroupName = containerGroupName + "-async";
             string containerImage1 = "microsoft/aci-helloworld";
             string containerImage2 = "microsoft/aci-tutorial-sidecar";
             
@@ -33,12 +36,16 @@
             // Demonstrate various container group operations
             CreateContainerGroup(azure, resourceGroupName, containerGroupName, containerImage1);
             CreateContainerGroupMulti(azure, resourceGroupName, multiContainerGroupName, containerImage1, containerImage2);
+            CreateContainerGroupWithPolling(azure, resourceGroupName, asyncContainerGroupName, containerImage1);
             ListContainerGroups(azure, resourceGroupName);
             PrintContainerGroupDetails(azure, resourceGroupName, containerGroupName);
 
             // Clean up container groups
+            Console.WriteLine($"\nPress ENTER to delete all container groups...");
+            Console.ReadLine();
             DeleteContainerGroup(azure, resourceGroupName, containerGroupName);
             DeleteContainerGroup(azure, resourceGroupName, multiContainerGroupName);
+            DeleteContainerGroup(azure, resourceGroupName, asyncContainerGroupName);
 
             // Remove resource group (if the user so chooses)
             Console.WriteLine();
@@ -110,7 +117,7 @@
 
         #region create_container_group
         /// <summary>
-        /// Creates a container group with a single container in the specified resource group.
+        /// Creates a container group with a single container.
         /// </summary>
         /// <param name="azure">An authenticated IAzure object.</param>
         /// <param name="resourceGroupName">The name of the resource group in which to create the container group.</param>
@@ -143,7 +150,7 @@
                 .WithDnsPrefix(containerGroupName)
                 .Create();
 
-            Console.WriteLine($"Container group '{containerGroup.Name}' will be reachable at http://{containerGroup.Fqdn}");
+            Console.WriteLine($"Once DNS has propagated, container group '{containerGroup.Name}' will be reachable at http://{containerGroup.Fqdn}");
         }
         #endregion
 
@@ -190,7 +197,71 @@
                 .WithDnsPrefix(containerGroupName)
                 .Create();
 
-            Console.WriteLine($"Container group '{containerGroup.Name}' will be reachable at http://{containerGroup.Fqdn}");
+            Console.WriteLine($"Once DNS has propagated, container group '{containerGroup.Name}' will be reachable at http://{containerGroup.Fqdn}");
+        }
+        #endregion
+
+        #region create_container_group_polling
+        /// <summary>
+        /// Creates a container group with a single container asynchronously, and
+        /// polls its status until its state is 'Running'.
+        /// </summary>
+        /// <param name="azure">An authenticated IAzure object.</param>
+        /// <param name="resourceGroupName">The name of the resource group in which to create the container group.</param>
+        /// <param name="containerGroupName">The name of the container group to create.</param>
+        /// <param name="containerImage">The container image name and tag, for example 'microsoft\aci-helloworld:latest'.</param>
+        private static void CreateContainerGroupWithPolling(IAzure azure,
+                                                 string resourceGroupName, 
+                                                 string containerGroupName, 
+                                                 string containerImage)
+        {
+            Console.WriteLine($"\nCreating container group '{containerGroupName}'...");
+
+            // Get the resource group's region
+            IResourceGroup resGroup = azure.ResourceGroups.GetByName(resourceGroupName);
+            Region azureRegion = resGroup.Region;
+
+            // Create the container group using a fire-and-forget task
+            Task.Run(() =>
+
+                azure.ContainerGroups.Define(containerGroupName)
+                    .WithRegion(azureRegion)
+                    .WithExistingResourceGroup(resourceGroupName)
+                    .WithLinux()
+                    .WithPublicImageRegistryOnly()
+                    .WithoutVolume()
+                    .DefineContainerInstance(containerGroupName + "-1")
+                        .WithImage(containerImage)
+                        .WithExternalTcpPort(80)
+                        .WithCpuCoreCount(1.0)
+                        .WithMemorySizeInGB(1)
+                        .Attach()
+                    .WithDnsPrefix(containerGroupName)
+                    .CreateAsync()
+            );
+
+            // Poll for the container group
+            IContainerGroup containerGroup = null;
+            while(containerGroup == null)
+            {
+                containerGroup = azure.ContainerGroups.GetByResourceGroup(resourceGroupName, containerGroupName);
+
+                Console.Write(".");
+
+                Thread.Sleep(1000);
+            }
+
+            Console.WriteLine();
+
+            // Poll until the container group is running
+            while(containerGroup.State != "Running")
+            {
+                Console.WriteLine($"Container group state: {containerGroup.Refresh().State}");
+                
+                Thread.Sleep(1000);
+            }
+
+            Console.WriteLine($"\nOnce DNS has propagated, container group '{containerGroup.Name}' will be reachable at http://{containerGroup.Fqdn}");
         }
         #endregion
 
@@ -251,9 +322,6 @@
         /// <param name="containerGroupName">The name of the container group to delete.</param>
         private static void DeleteContainerGroup(IAzure azure, string resourceGroupName, string containerGroupName)
         {
-            Console.WriteLine($"\nPress ENTER to delete container group '{containerGroupName}':");
-            Console.ReadLine();
-
             IContainerGroup containerGroup = null;
 
             while (containerGroup == null)
