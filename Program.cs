@@ -1,12 +1,14 @@
 ﻿namespace aci_doc_sample_dotnet
 {
     using System;
+    using System.Collections.Generic;
     using System.Threading;
     using System.Threading.Tasks;
     using Microsoft.Azure.Management.Fluent;
     using Microsoft.Azure.Management.ResourceManager.Fluent;
     using Microsoft.Azure.Management.ResourceManager.Fluent.Core;
     using Microsoft.Azure.Management.ContainerInstance.Fluent;
+    using Microsoft.Azure.Management.ContainerInstance.Fluent.Models;
 
     class Program
     {
@@ -14,11 +16,15 @@
         {
             #region local_config
             string resourceGroupName  = SdkContext.RandomResourceName("rg-aci-", 6);
+            
             string containerGroupName = SdkContext.RandomResourceName("aci-", 6);
             string multiContainerGroupName = containerGroupName + "-multi";
             string asyncContainerGroupName = containerGroupName + "-async";
-            string containerImage1 = "microsoft/aci-helloworld";
-            string containerImage2 = "microsoft/aci-tutorial-sidecar";
+            string taskContainerGroupName  = containerGroupName + "-task";
+            
+            string containerImageApp     = "microsoft/aci-helloworld";
+            string containerImageSidecar = "microsoft/aci-tutorial-sidecar";
+            string taskContainerImage    = "microsoft/aci-wordcount";
             
             // Set the AZURE_AUTH_LOCATION environment variable with the full
             // path to an auth file. Create an auth file with the Azure CLI:
@@ -34,9 +40,10 @@
             CreateResourceGroup(azure, resourceGroupName, Region.USEast);
 
             // Demonstrate various container group operations
-            CreateContainerGroup(azure, resourceGroupName, containerGroupName, containerImage1);
-            CreateContainerGroupMulti(azure, resourceGroupName, multiContainerGroupName, containerImage1, containerImage2);
-            CreateContainerGroupWithPolling(azure, resourceGroupName, asyncContainerGroupName, containerImage1);
+            CreateContainerGroup(azure, resourceGroupName, containerGroupName, containerImageApp);
+            CreateContainerGroupMulti(azure, resourceGroupName, multiContainerGroupName, containerImageApp, containerImageSidecar);
+            CreateContainerGroupWithPolling(azure, resourceGroupName, asyncContainerGroupName, containerImageApp);
+            RunTaskBasedContainer(azure, resourceGroupName, taskContainerGroupName, taskContainerImage, null);
             ListContainerGroups(azure, resourceGroupName);
             PrintContainerGroupDetails(azure, resourceGroupName, containerGroupName);
 
@@ -46,6 +53,7 @@
             DeleteContainerGroup(azure, resourceGroupName, containerGroupName);
             DeleteContainerGroup(azure, resourceGroupName, multiContainerGroupName);
             DeleteContainerGroup(azure, resourceGroupName, asyncContainerGroupName);
+            DeleteContainerGroup(azure, resourceGroupName, taskContainerGroupName);
 
             // Remove resource group (if the user so chooses)
             Console.WriteLine();
@@ -248,7 +256,7 @@
 
                 Console.Write(".");
 
-                Thread.Sleep(1000);
+                SdkContext.DelayProvider.Delay(1000);
             }
 
             Console.WriteLine();
@@ -265,6 +273,68 @@
         }
         #endregion
 
+        #region create_container_group_task
+        /// <summary>
+        /// Creates a container group with a single task-based container who's
+        /// restart policy is 'Never'. If specified, the container runs a custom
+        /// command line at startup.
+        /// </summary>
+        /// <param name="azure">An authenticated IAzure object.</param>
+        /// <param name="resourceGroupName">The name of the resource group in which to create the container group.</param>
+        /// <param name="containerGroupName">The name of the container group to create.</param>
+        /// <param name="containerImage">The container image name and tag, for example 'microsoft\aci-wordcount:latest'.</param>
+        /// <param name="startCommandLine">The command line that should be executed when the container starts. This value can be <c>null</c>.</param>
+        private static void RunTaskBasedContainer(IAzure azure,
+                                                 string resourceGroupName, 
+                                                 string containerGroupName, 
+                                                 string containerImage,
+                                                 string startCommandLine)
+        {
+            // If a start command wasn't specified, use a default
+            if (String.IsNullOrEmpty(startCommandLine))
+            {
+                startCommandLine = "python wordcount.py http://shakespeare.mit.edu/romeo_juliet/full.html";
+            }
+
+            // Configure some environment variables in the container which the
+            // wordcount.py or other script can read to modify its behavior.
+            Dictionary<string, string> envVars = new Dictionary<string, string>
+            {
+                { "NumWords", "5" },
+                { "MinLength", "8" }
+            };
+
+            Console.WriteLine($"\nCreating container group '{containerGroupName}' with start command '{startCommandLine}'");
+
+            // Get the resource group's region
+            IResourceGroup resGroup = azure.ResourceGroups.GetByName(resourceGroupName);
+            Region azureRegion = resGroup.Region;
+
+            // Create the container group
+            var containerGroup = azure.ContainerGroups.Define(containerGroupName)
+                .WithRegion(azureRegion)
+                .WithExistingResourceGroup(resourceGroupName)
+                .WithLinux()
+                .WithPublicImageRegistryOnly()
+                .WithoutVolume()
+                .DefineContainerInstance(containerGroupName + "-1")
+                    .WithImage(containerImage)
+                    .WithExternalTcpPort(80)
+                    .WithCpuCoreCount(1.0)
+                    .WithMemorySizeInGB(1)
+                    .WithStartingCommandLines(startCommandLine.Split())
+                    .WithEnvironmentVariables(envVars)
+                    .Attach()
+                .WithDnsPrefix(containerGroupName)
+                .WithRestartPolicy(ContainerGroupRestartPolicy.Never)
+                .Create();
+
+            // Print the container's logs
+            Console.WriteLine($"Logs for container '{containerGroupName}-1':");
+            Console.WriteLine(containerGroup.GetLogContent(containerGroupName + "-1"));
+        }
+        #endregion
+
         #region list_container_groups
         /// <summary>
         /// Prints the container groups in the specified resource group.
@@ -273,7 +343,7 @@
         /// <param name="resourceGroupName">The name of the resource group containing the container group(s).</param>
         private static void ListContainerGroups(IAzure azure, string resourceGroupName)
         {
-            Console.WriteLine($"\nListing container groups in resource group '{resourceGroupName}'...");
+            Console.WriteLine($"Listing container groups in resource group '{resourceGroupName}'...");
 
             foreach (var containerGroup in azure.ContainerGroups.ListByResourceGroup(resourceGroupName))
             {
