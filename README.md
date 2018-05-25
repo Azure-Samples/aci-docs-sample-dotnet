@@ -6,7 +6,7 @@ The code in this project is ingested into one or more articles on [docs.microsof
 
 ## Features
 
-The code in this sample project demontrates the following operations:
+The code in this sample project demonstrates the following operations:
 
 * Authenticate with Azure
 * Create resource group
@@ -14,6 +14,7 @@ The code in this sample project demontrates the following operations:
   * Expose application container to internet with public DNS name
   * Multi-container group includes both application and sidecar containers
   * Demonstrate async container group create
+  * Run a task-based container with custom command line and environment variables
 * Get and print container group details
 * Delete container groups
 * Delete resource group
