@@ -1,3 +1,13 @@
+---
+page_type: sample
+languages:
+- csharp
+products:
+- azure
+description: "This .NET Core 2.0 console application demonstrates several common Azure Container Instances (ACI) operations in C# using the fluent APIs in the Azure Management Libraries for .NET."
+urlFragment: aci-docs-sample-dotnet
+---
+
 # Azure Container Instances .NET code samples for documentation
 
 This .NET Core 2.0 console application demonstrates several common [Azure Container Instances (ACI)](https://docs.microsoft.com/azure/container-instances/) operations in C# using the fluent APIs in the [Azure Management Libraries for .NET](https://docs.microsoft.com/dotnet/azure/dotnet-sdk-azure-concepts).
